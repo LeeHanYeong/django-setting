@@ -1,0 +1,5 @@
+recursive-include django_setting/files *
+recursive-include django_setting/startproject *
+recursive-include django_setting/utils *
+recursive-include django_setting/codes/member *
+recursive-include django_setting/codes/settings *
