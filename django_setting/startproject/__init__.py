@@ -23,8 +23,8 @@ class StartProject:
         # Project, Django paths
         self.PROJECT_DIR = os.path.join(self.CWD, self.project_name)
         self.DJANGO_DIR = os.path.join(self.PROJECT_DIR, 'django_app')
-        self.CONFIG_DIR = os.path.join(self.DJANGO_DIR, 'config')
-        self.SETTINGS_DIR = os.path.join(self.CONFIG_DIR, 'settings')
+        self.DJANGO_CONFIG_DIR = os.path.join(self.DJANGO_DIR, 'config')
+        self.DJANGO_SETTINGS_DIR = os.path.join(self.DJANGO_CONFIG_DIR, 'settings')
 
         # pyenv version specify
         self.python_version = select_python_version()
@@ -122,7 +122,7 @@ class StartProject:
     def manage_settings(self):
         print_cmd_step('Manage Django settings')
         # 기존 settings.py파일을 읽고 지움
-        os.chdir(self.CONFIG_DIR)
+        os.chdir(self.DJANGO_CONFIG_DIR)
         original_settings = open('settings.py').read()
         os.remove('settings.py')
 
@@ -132,7 +132,7 @@ class StartProject:
             open(os.path.join(self.PACKAGE_CODE_DIR, 'settings', '__init__')).read())
 
         # settings/base.py파일 생성
-        base_settings = self._get_secret_and_sub_settings(original_settings)
+        base_settings = self._sub_settings(self._get_secret_values(original_settings))
         open('settings/base.py', 'w').write(base_settings)
 
         # settings/debug.py파일 생성
@@ -162,7 +162,7 @@ class StartProject:
         subprocess.call('git add -A', shell=True, stdout=DEVNULL)
         subprocess.call('git commit -m \'First commit\'', shell=True, stdout=DEVNULL)
 
-    def _get_secret_and_sub_settings(self, original_settings):
+    def _get_secret_values(self, settings):
         secret_list = [
             {
                 'regex': r'SECRET_KEY = \'(?P<secret_key>.*?)\'.*?\n',
@@ -171,37 +171,48 @@ class StartProject:
                 'preserve': False
             }
         ]
-        replacements = {
-            # import
-            r'import os': r'import os\nimport json',
-            # project name
-            'Django settings for config project.': 'Django settings for %s project.' % self.project_name,
-
-            # root, template, static paths
-            r'\n(BASE_DIR.*?\n)': open(
-                os.path.join(self.PACKAGE_CODE_DIR, 'settings', 'base')).read(),
-
-            # template dirs
-            re.compile(
-                r'(?P<before>\nTEMPLATES = .*?\n)(?P<indent>\s+)(?P<key>\'DIRS\': )(?P<value>\[\]),',
-                re.DOTALL):
-                r'\g<before>\g<indent>\g<key>[\n\g<indent>    TEMPLATE_DIR,\n\g<indent>],',
-
-            # INSTALLED_APPS
-            re.compile(r'(\nINSTALLED_APPS = .*?)(\n])', re.DOTALL):
-                r"""\g<1>
-            'member',
-        ]
-        """,
-        }
-
         for secret in secret_list:
-            value = re.search(secret['regex'], original_settings).group(secret['group'])
+            value = re.search(secret['regex'], settings).group(secret['group'])
             self.secret_dict[secret['key']] = value
             if value and not secret.get('preserve'):
-                original_settings = re.sub(secret['regex'], '', original_settings)
+                settings = re.sub(secret['regex'], '', settings)
+        return settings
+
+    def _sub_settings(self, settings):
+        import_pattern = r'import os'
+        import_repl = r'import os\nimport json'
+        project_name_pattern = 'Django settings for config project.'
+        project_name_repl = 'Django settings for %s project.' % self.project_name
+        paths_pattern = r'\n(BASE_DIR.*?\n)'
+        paths_repl = open(os.path.join(self.PACKAGE_CODE_DIR, 'settings', 'base')).read()
+        remove_comment_secret_pattern = re.compile(r'(# SECURITY WARNING: keep the secret.*?\n)', re.DOTALL)
+        remove_comment_secret_repl = ''
+        templates_pattern = re.compile(
+            r'(?P<before>\nTEMPLATES = .*?\n)(?P<indent>\s+)(?P<key>\'DIRS\': )(?P<value>\[\]),',
+            re.DOTALL
+        )
+        templates_repl = r'\g<before>\g<indent>\g<key>[\n\g<indent>    TEMPLATE_DIR,\n\g<indent>],'
+        installed_apps_pattern = re.compile(r'(\nINSTALLED_APPS = .*?)(\n])', re.DOTALL)
+        installed_apps_repl = r'%s' % (
+            open(os.path.join(self.PACKAGE_CODE_DIR, 'settings', 'base_installed_apps')).read()
+        )
+
+        replacements = {
+            # import
+            import_pattern: import_repl,
+            # project name
+            project_name_pattern: project_name_repl,
+            # root, template, static paths
+            paths_pattern: paths_repl,
+            # remove comments
+            remove_comment_secret_pattern: remove_comment_secret_repl,
+            # template dirs
+            templates_pattern: templates_repl,
+            # INSTALLED_APPS
+            installed_apps_pattern: installed_apps_repl,
+        }
 
         for src, target in replacements.items():
-            original_settings = re.sub(src, target, original_settings)
+            settings = re.sub(src, target, settings)
 
-        return original_settings
+        return settings

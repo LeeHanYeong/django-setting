@@ -1,13 +1,15 @@
 #!/usr/bin/env python
+import os
 import sys
 
 from django_setting.removeproject import RemoveProject
+from django_setting.settings import SettingsBuild
 from django_setting.startproject import StartProject
 
 argv = sys.argv
 args_length = len(argv)
 if args_length < 2:
-    print('Please enter command')
+    print('Please enter project name')
 cmd = argv[1]
 if cmd == 'startproject':
     project_name = argv[2]
@@ -15,3 +17,6 @@ if cmd == 'startproject':
 elif cmd == 'removeproject':
     project_name = argv[2]
     RemoveProject(project_name).execute()
+elif cmd == 'config':
+    project_name = argv[2]
+    SettingsBuild(project_name).execute()
